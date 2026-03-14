@@ -1,5 +1,7 @@
 # Human Hook
 
+![Human Hook](assets/logo.png)
+
 A skill + hook system that verifies developer understanding before AI-generated code leaves their machine.
 
 AI coding agents write and commit code fast. Human Hook adds one intentional checkpoint: before `git push`, it asks the developer 2–3 questions about the outgoing changes — architectural intent, integration points, trade-offs — and only allows the push if they can demonstrate genuine understanding. No checkbox, no quiz. A short conversation.
