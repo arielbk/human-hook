@@ -24,41 +24,15 @@ The verification receipt is a SHA-256 hash of the outgoing diff. If new commits 
 
 ### 1. Install the skill
 
-Copy `SKILL.md` into your editor's skills directory:
-
-**Cursor (project-level):**
 ```bash
-mkdir -p .cursor/skills/human-hook
-cp /path/to/human-hook/SKILL.md .cursor/skills/human-hook/SKILL.md
+npx skills add arielbk/human-hook
 ```
 
-**Cursor (user-level):**
-```bash
-mkdir -p ~/.cursor/skills/human-hook
-cp /path/to/human-hook/SKILL.md ~/.cursor/skills/human-hook/SKILL.md
-```
+This installs the skill into your editor's skills directory. The skill handles the rest — on first use it detects your editor (Cursor, Claude Code, or both) and runs setup automatically.
 
-**Claude Code** — place `SKILL.md` in your configured skills directory.
+### 2. That's it
 
-### 2. Run setup in your project
-
-From your project root, run the setup script once:
-
-```bash
-bash /path/to/human-hook/scripts/setup.sh
-```
-
-This will:
-- Install the hook script to `.human-hook/hooks/`
-- Merge the hook entry into `.cursor/hooks.json` and/or `.claude/settings.json`
-- Create `.human-hook/config.json` with defaults
-- Add `.human-hook/verified` to `.gitignore`
-
-Setup is idempotent — safe to re-run.
-
-## Usage
-
-Just work normally. Ask the agent to commit as many times as needed — commits are ungated. When you're ready to push, tell the agent to push. The hook fires, the agent checks the receipt, and if there isn't one it starts the verification conversation.
+Tell the agent to push. If setup hasn't run yet, the skill will run it. The hook gets installed, and from that point on every `git push` through the agent is gated.
 
 **To skip verification for a single push** (emergencies only):
 
@@ -70,7 +44,7 @@ Or tell the agent: *"Use the override and push."*
 
 ## Configuration
 
-After setup, `.human-hook/config.json` controls the behavior. Commit this file to share settings with your team.
+After first use, `.human-hook/config.json` appears in your project. Commit it to share settings with your team.
 
 ```json
 {
@@ -97,7 +71,7 @@ After setup, `.human-hook/config.json` controls the behavior. Commit this file t
 | `trivial_threshold.ignore_patterns` | lockfiles, generated files | Files matching these patterns are always considered trivial. |
 | `override_env_var` | `HUMAN_HOOK_OVERRIDE` | Environment variable that bypasses verification when set. |
 
-See `.human-hook.config.example.json` for a copy of the defaults.
+See `skill/references/.human-hook.config.example.json` for a copy of the defaults.
 
 ## What gets verified
 
@@ -111,7 +85,7 @@ Questions are generated from the actual diff — not generic questions that coul
 
 A pass requires demonstrating understanding across all three areas. Honest gaps with self-awareness are acceptable; the goal is genuine engagement, not perfection.
 
-See `references/verification-guide.md` for detailed evaluation criteria and examples.
+See `skill/references/verification-guide.md` for detailed evaluation criteria and examples.
 
 ## Compatibility
 
@@ -127,11 +101,16 @@ A single `SKILL.md` works in both editors without modification.
 
 ```
 human-hook/
-├── SKILL.md                          # Skill definition (Cursor + Claude Code)
-├── scripts/
-│   ├── setup.sh                      # Installs hooks for detected editors
-│   └── check-verification.sh         # Hook script — receipt validation
-├── references/
-│   └── verification-guide.md         # Evaluation criteria and examples
-└── .human-hook.config.example.json   # Reference configuration
+├── assets/
+│   └── logo.png
+├── docs/                             # PRD and technical spec
+├── README.md
+└── skill/                            # Everything bundled by npx skills add
+    ├── SKILL.md                      # Skill definition (Cursor + Claude Code)
+    ├── scripts/
+    │   ├── setup.sh                  # Installs hooks for detected editors
+    │   └── check-verification.sh    # Hook script — receipt validation
+    └── references/
+        ├── verification-guide.md    # Evaluation criteria and examples
+        └── .human-hook.config.example.json
 ```

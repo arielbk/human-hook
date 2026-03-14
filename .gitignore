@@ -3,3 +3,6 @@
 .claude/
 .agents/
 skills-lock.json
+
+# Human Hook — local verification receipt
+.human-hook/verified

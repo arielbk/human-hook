@@ -138,6 +138,6 @@ HUMAN_HOOK_OVERRIDE=1 git push
 ## Reference
 
 - Detailed evaluation criteria and examples: `references/verification-guide.md`
-- Config defaults: `.human-hook.config.example.json`
+- Config defaults: `references/.human-hook.config.example.json`
 - Hook script logic: `scripts/check-verification.sh`
 - Setup script: `scripts/setup.sh`
