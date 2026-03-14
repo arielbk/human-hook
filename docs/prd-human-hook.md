@@ -10,8 +10,8 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 
 ## 2. Goals
 
-- **Verify developer understanding** of code changes before they are committed or pushed, through a conversational back-and-forth — not a checkbox.
-- **Create trust in collaborative teams** by ensuring that every commit represents understood code, not just agent-generated output.
+- **Verify developer understanding** of code changes before they leave the developer's machine, through a conversational back-and-forth — not a checkbox. The default gate is `git push` — the moment code crosses from local to shared.
+- **Create trust in collaborative teams** by ensuring that every push represents understood code, not just agent-generated output.
 - **Add productive friction** that pushes developers toward understanding, not away from shipping. The verification process itself should be educational.
 - **Run on the developer's own LLM subscription** (Cursor, Claude Code) with zero additional API cost to the developer or to us.
 - **Support the two leading AI coding tools** — Cursor and Claude Code — from day one, with a single installation step.
@@ -21,7 +21,7 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 
 ### Developer (primary user)
 
-- As a developer using an AI coding agent, I want to be prompted to demonstrate my understanding of the code before I commit, so that I catch my own knowledge gaps before shipping.
+- As a developer using an AI coding agent, I want to be prompted to demonstrate my understanding of the code before I push, so that I catch my own knowledge gaps before sharing code with my team.
 - As a developer, I want the verification to happen naturally in my editor's chat panel, so that it doesn't break my flow.
 - As a developer, I want to be able to override the verification for urgent situations, so that I'm not completely blocked when I need to ship quickly.
 - As a developer, I want trivial changes (typo fixes, config tweaks) to skip verification automatically, so that the friction is proportional to the risk.
@@ -41,15 +41,15 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 
 ### 4.1 Conversational Verification
 
-1. When a developer attempts to commit or push code, the system must initiate a conversational understanding check in the editor's agent/chat panel.
-2. The system must analyze the staged changes (git diff) and generate 2–3 probing questions tailored to the specific changes.
+1. When a developer attempts to push code, the system must initiate a conversational understanding check in the editor's agent/chat panel. (Optionally configurable to also trigger on commit.)
+2. The system must analyze the outgoing changes (the diff between the local branch and the remote) and generate 2–3 probing questions tailored to the specific changes.
 3. Questions must focus on three areas:
   - **Architectural intent** — What problem does this change solve? Why this approach?
   - **Integration awareness** — How does this change interact with the rest of the system?
   - **Trade-off consciousness** — What are the risks or trade-offs of this approach?
 4. The system must evaluate the developer's responses using the user's own LLM (via the editor's built-in model) and determine whether they demonstrate genuine understanding.
-5. On pass: the commit/push proceeds normally.
-6. On fail: the commit/push is blocked, and the system provides guidance on what to review before retrying.
+5. On pass: the push proceeds normally.
+6. On fail: the push is blocked, and the system provides guidance on what to review before retrying.
 
 ### 4.2 Installation and Setup
 
@@ -60,15 +60,15 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 
 ### 4.3 Hook Behavior
 
-1. The hook must intercept git commands (`git commit`, `git push`, or both) initiated through the AI agent.
+1. The hook must intercept `git push` initiated through the AI agent by default. Optionally, teams can configure it to also trigger on `git commit`.
 2. Which commands trigger verification must be configurable at the project level.
 3. The hook must check for a valid verification receipt before allowing the command to proceed.
 4. If no valid receipt exists, the hook must block the command and direct the agent to initiate the verification conversation.
 
 ### 4.4 Verification State
 
-1. Upon successful verification, the system must store a verification receipt tied to the current state of the staged changes (diff hash).
-2. The receipt must automatically invalidate if the staged changes are modified after verification (prevents verify-then-change-then-commit).
+1. Upon successful verification, the system must store a verification receipt tied to the current state of the outgoing changes (diff hash of local vs. remote).
+2. The receipt must automatically invalidate if the outgoing changes are modified after verification (e.g., new commits are made after verification but before push).
 3. The verification state must be local to the developer's machine and not committed to the repository.
 
 ### 4.5 Trivial Change Threshold
@@ -104,12 +104,12 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 ### Interaction Flow
 
 - The entire experience happens in the editor's existing chat/agent panel — no new UI, no popups, no separate tools.
-- The developer's normal workflow is: work with agent → agent writes code → developer says "commit" → verification triggers → short conversation → commit proceeds.
+- The developer's normal workflow is: work with agent → agent writes code and commits → developer says "push" → verification triggers → short conversation → push proceeds. The agent is free to make as many local commits as needed; the gate only activates when code is about to leave the machine.
 
 ### Competitive Context
 
 - **Gater.app** is the closest existing product. It generates quizzes from GitHub PRs to verify reviewer understanding before merge. Key differences from Human Hook:
-  - Gater operates at the PR level (post-push); Human Hook operates pre-commit (shift-left).
+  - Gater operates at the PR level (post-push); Human Hook operates pre-push (shift-left).
   - Gater uses multiple-choice quizzes; Human Hook uses open-ended conversation.
   - Gater verifies the *reviewer*; Human Hook verifies the *author*.
   - Gater requires a GitHub App + Chrome Extension; Human Hook lives inside the editor.
@@ -125,8 +125,7 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 ## 8. Open Questions
 
 1. **Team visibility (future)**: What's the right minimal signal for teams? A commit message emoji? A field in PR descriptions? How do we communicate "this code was understood" without creating a shame dynamic?
-2. **Git hook fallback**: Should v1 include a lightweight git pre-commit/pre-push hook that just checks for the receipt file (no LLM needed) as a safety net for manual terminal commits?
+2. **Git hook fallback**: Should v1 include a lightweight git pre-push hook that just checks for the receipt file (no LLM needed) as a safety net for manual terminal pushes?
 3. **Verification depth scaling**: Should the number/depth of questions scale with the size or risk of the change? A 500-line architectural change might warrant deeper probing than a 20-line feature.
-4. **Multi-commit sessions**: If a developer verifies understanding and then makes 3 commits in quick succession to the same area, should each commit require fresh verification?
-5. **Agent-initiated commits**: Some workflows have the agent commit automatically as part of a task. Should verification interrupt this flow, or should it only trigger on explicit developer-initiated commits?
+4. **Commit-level gating (opt-in)**: Some teams may want to gate individual commits rather than just pushes. The configuration supports this, but should v1 actively promote it or keep it as an advanced option?
 
