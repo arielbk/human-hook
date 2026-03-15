@@ -1,6 +1,6 @@
 # Pushback — Technical Specification
 
-This document covers the implementation architecture for Pushback v1 as defined in the [Product Requirements Document](./prd-pushback.md). It focuses on the skill + hook combo approach targeting Cursor and Claude Code.
+This document covers the implementation architecture for Pushback v1 as defined in the [Product Requirements Document](./prd-pushback.md). It uses a native git pre-push hook to gate all pushes — from any client (terminal, IDE, AI agent).
 
 ## 1. System Architecture
 
@@ -15,41 +15,42 @@ Pushback is composed of three parts that work together:
 │  evaluates answers, writes the receipt.                  │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
-│                      HOOK                               │
+│                   PRE-PUSH HOOK                         │
 │                                                         │
-│  check-verification.sh — Called by the editor before    │
-│  git push (default) or git commit (opt-in).             │
-│  Checks for a valid receipt.                            │
-│  Blocks (exit 2) or allows (exit 0).                    │
+│  .git/hooks/pre-push — Native git hook that runs        │
+│  before every push. Checks for a valid receipt.         │
+│  Blocks (exit 1) or allows (exit 0).                    │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
 │                 VERIFICATION STATE                      │
 │                                                         │
-│  .pushback/verified — Local receipt file containing   │
+│  .pushback/verified — Local receipt file containing     │
 │  a hash of the outgoing diff. Auto-invalidates when     │
 │  local commits change what would be pushed.              │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Data flow on `git push` (default trigger):**
+**Data flow on `git push`:**
 
 ```
-1. Developer (or agent) runs `git push`
-2. Editor hook fires (beforeShellExecution / PreToolUse)
-3. check-verification.sh runs:
-   a. Compute SHA-256 of outgoing diff (local vs. remote)
-   b. Read .pushback/verified
-   c. Compare hashes
+1. Developer (or agent) runs `git push` from any client
+2. Git fires the pre-push hook (.git/hooks/pre-push)
+3. The hook runs:
+   a. Check for override env var → allow if set
+   b. Compute SHA-256 of outgoing diff (local vs. remote)
+   c. Read .pushback/verified
+   d. Compare hashes
 4. If match → exit 0 (allow)
-5. If no match → exit 2 (block) + return agent_message
-   instructing the agent to run the Pushback verification
-6. Agent activates the skill → conversational verification
-7. On pass → skill writes new receipt → agent retries push
-8. On fail → skill explains gaps, developer reviews and retries
+5. If no match → exit 1 (block) + print message to stderr
+   telling the developer to run Pushback verification
+6. Developer invokes the skill in their AI agent
+7. Agent activates the skill → conversational verification
+8. On pass → skill writes new receipt → developer retries push
+9. On fail → skill explains gaps, developer reviews and retries
 ```
 
-This design lets the agent freely commit during a work session. Verification only triggers at the trust boundary — when code is about to leave the developer's machine and reach the team.
+This design lets the agent freely commit during a work session. Verification only triggers at the trust boundary — when code is about to leave the developer's machine and reach the team. Because it's a native git hook, it works regardless of how the push is initiated.
 
 ## 2. Directory Structure
 
@@ -57,27 +58,30 @@ This design lets the agent freely commit during a work session. Verification onl
 pushback/
 ├── SKILL.md                          # Skill definition (Cursor + Claude Code)
 ├── scripts/
-│   ├── setup.sh                      # Auto-installs hooks for detected editors
-│   └── check-verification.sh         # Hook script — receipt validation
+│   ├── setup.js                      # Installs hook + config + persistence
+│   ├── pre-push.js                   # Git pre-push hook logic
+│   └── install.js                    # Lightweight hook installer (for prepare)
 ├── references/
 │   └── verification-guide.md         # Detailed verification criteria and examples
-└── .pushback.config.example.json   # Example project-level configuration
+└── .pushback.config.example.json     # Example project-level configuration
 ```
 
 When installed in a project, the following is created:
 
 ```
 <project-root>/
-├── .cursor/
-│   └── hooks.json                    # Cursor hook config (merged)
-├── .claude/
-│   └── settings.json                 # Claude Code hook config (merged)
+├── .git/
+│   └── hooks/
+│       └── pre-push                  # Tiny Node shim → .pushback/hooks/pre-push.js
 └── .pushback/
     ├── config.json                   # Project-level configuration
     ├── verified                      # Current verification receipt (gitignored)
     └── hooks/
-        └── check-verification.sh     # Copied hook script
+        ├── pre-push.js              # Hook logic (version-controlled)
+        └── install.js               # Lightweight hook installer (version-controlled)
 ```
+
+The hook logic at `.pushback/hooks/pre-push.js` is committed to the repo so the team shares the same version. The shim at `.git/hooks/pre-push` is not version-controlled and is created by running setup.
 
 ## 3. Skill Definition
 
@@ -85,7 +89,7 @@ When installed in a project, the following is created:
 
 The skill is the brain of Pushback. It instructs the agent on how to conduct the verification conversation. Key responsibilities:
 
-- Detect whether hooks are installed; if not, run `scripts/setup.sh`
+- Detect whether the pre-push hook is installed; if not, run `scripts/setup.js`
 - Read the outgoing diff via `git diff @{upstream}..HEAD`
 - Assess whether changes are trivial (skip verification if so)
 - Generate targeted questions based on the diff
@@ -142,77 +146,59 @@ Thresholds are configurable via `.pushback/config.json`.
 
 ## 4. Hook Implementation
 
-### Cursor — `beforeShellExecution`
+### Git Pre-Push Hook
 
-Cursor hooks are configured in `.cursor/hooks.json`. The default configuration intercepts `git push`. Teams can add `git commit` to the matcher if they want per-commit gating.
+Pushback uses a native git `pre-push` hook. The `.git/hooks/pre-push` file is a small Node.js shim that `require()`s the real hook logic from `.pushback/hooks/pre-push.js`. This runs before every push, regardless of client — terminal, IDE, or AI agent.
 
-```json
-{
-  "version": 1,
-  "hooks": {
-    "beforeShellExecution": [
-      {
-        "command": ".pushback/hooks/check-verification.sh",
-        "matcher": "git push"
-      }
-    ]
-  }
-}
-```
+Both scripts are written in Node.js with zero npm dependencies (only built-in modules: `fs`, `path`, `child_process`, `crypto`). This ensures cross-platform compatibility — macOS, Linux, and Windows (via Git Bash) — without worrying about shell differences.
 
-### Claude Code — `PreToolUse`
-
-Claude Code hooks are configured in `.claude/settings.json`. The hook listens for Bash tool usage matching git commands.
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/check-verification.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Note: Claude Code's matcher targets the tool name (`Bash`), not the command content. The `check-verification.sh` script itself inspects the command string from the JSON input to determine if it's a `git push` (or `git commit` if configured).
-
-### check-verification.sh
-
-The hook script receives JSON on stdin from the editor. Its logic:
+The hook logic:
 
 ```
-1. Parse the command from JSON input
-2. Check if command matches configured triggers (default: git push)
-   - If no match → exit 0 (allow, not a relevant command)
-3. Check for override flag
-   - If PUSHBACK_OVERRIDE env var is set → exit 0 (allow)
-4. Compute the outgoing diff hash:
-   - If upstream exists: `git diff @{upstream}..HEAD | shasum -a 256`
-   - If no upstream (new branch): `git diff main..HEAD | shasum -a 256`
-     (falls back to default branch detection via `git remote show origin`)
+1. Check for override env var (default: PUSHBACK_OVERRIDE)
+   - If set → exit 0 (allow)
+2. Compute the outgoing diff hash:
+   - If upstream exists: SHA-256 of `git diff @{upstream}..HEAD`
+   - If no upstream (new branch): SHA-256 of `git diff <default-branch>..HEAD`
+     (default branch detected via `git remote show origin`)
    - If no outgoing changes: exit 0 (allow, nothing to verify)
-5. Read .pushback/verified
-6. If file exists and hash matches → exit 0 (allow)
-7. If no match → output deny JSON and exit 2 (block)
+3. Read .pushback/verified
+4. If file exists and hash matches → exit 0 (allow)
+5. If no match → print block message to stderr and exit 1 (block)
 ```
 
-The deny response includes an `agent_message` directing the agent to the skill:
+The block message speaks to both humans and agents:
 
-```json
-{
-  "permission": "deny",
-  "user_message": "Pushback: verification required before pushing.",
-  "agent_message": "The push has been blocked because the developer has not yet verified their understanding of the outgoing changes. Use the Pushback skill to conduct a verification conversation. Compare local vs. remote with `git diff @{upstream}..HEAD` to see all outgoing changes, ask the developer 2-3 questions about the architectural intent, integration points, and trade-offs, evaluate their responses, and write the verification receipt to .pushback/verified if they demonstrate understanding."
-}
 ```
+Pushback: verification required before pushing.
+
+This push was blocked because the developer hasn't verified their
+understanding of the outgoing changes yet.
+
+To proceed, run the Pushback skill — it will walk through the diff,
+ask 2-3 questions about the changes, and write a verification receipt
+if the developer demonstrates understanding. The push will succeed
+on retry once the receipt is in place.
+
+  If you're the developer: ask your AI agent to run Pushback, or
+  invoke it directly in your editor's chat.
+
+  If you're an AI agent: invoke the "pushback" skill now. Do not
+  attempt to bypass verification, skip the hook, or write the
+  receipt directly — the developer must go through the conversation.
+```
+
+The override mechanism (`PUSHBACK_OVERRIDE=1 git push`) is intentionally omitted from the block message to prevent agents from eagerly bypassing verification. It's documented in the config and README for human developers who need it.
+
+### Hook Chaining
+
+If the user already has a `.git/hooks/pre-push` when setup runs:
+
+1. Check if it's already our hook (grep for "Pushback" marker)
+2. If it's ours: overwrite with the latest version
+3. If it's someone else's: rename to `pre-push.previous`, install ours, and chain — our hook calls `pre-push.previous` after passing its own check
+
+This preserves existing pre-push hooks.
 
 ## 5. Verification Receipt
 
@@ -242,39 +228,41 @@ For later versions, the receipt could be expanded to a JSON format:
 
 ## 6. Setup Script
 
-`scripts/setup.sh` handles first-time installation. The skill instructs the agent to run this on first use.
-
-### Detection Logic
-
-```
-1. Check for .cursor/ directory → Cursor project
-2. Check for .claude/ directory → Claude Code project
-3. Both can be true simultaneously
-```
+`scripts/setup.js` handles first-time installation. Written in Node.js for cross-platform compatibility. The skill instructs the agent to run this on first use.
 
 ### Installation Steps
 
-For each detected editor:
+1. **Create** `.pushback/hooks/` directory
+2. **Copy** hook logic to `.pushback/hooks/pre-push.js` (version-controlled, shared with team)
+3. **Copy** installer to `.pushback/hooks/install.js` (version-controlled)
+4. **Create** `.pushback/config.json` with defaults (if not present)
+5. **Add** `.pushback/verified` to `.gitignore` (if not already present)
+6. **Detect hook manager** and integrate for persistence (see below)
+7. **Install** a small Node shim at `.git/hooks/pre-push` for the current developer
+8. **Install** GitHub Action workflow (if template is available)
 
-1. **Read existing hook config** (if any)
-2. **Merge** the Pushback hook entry into the existing config (do not overwrite)
-3. **Write** the updated config back
-4. **Copy** `check-verification.sh` to the appropriate hooks directory
-5. **Make executable**: `chmod +x`
+### Hook Persistence
 
-Additionally:
+The first developer runs setup manually. After that, the hook must install automatically for every teammate who clones the repo. The setup script detects the project's hook management strategy and integrates accordingly:
 
-6. **Create** `.pushback/` directory
-7. **Create** `.pushback/config.json` with defaults
-8. **Add** `.pushback/verified` to `.gitignore` (if not already present)
+| Strategy | Detection | Integration |
+|----------|-----------|-------------|
+| **Husky** | `.husky/` directory exists | Creates/appends to `.husky/pre-push` with `node .pushback/hooks/pre-push.js` |
+| **lefthook** | `lefthook.yml` or `.lefthook.yml` exists | Appends a `pre-push` command entry to the YAML config |
+| **package.json** (no hook manager) | `package.json` exists | Adds/appends a `prepare` script: `node .pushback/hooks/install.js` |
+| **No package.json** | None of the above | Installs shim directly; warns that teammates need manual setup |
 
-### Config Merging
+The `install.js` script is a lightweight, silent installer designed to run from a `prepare` script. It only installs the git hook shim — no config, no workflow, no output on success. It exits silently if Pushback isn't set up in the project or if the hook is already installed.
 
-The setup script must handle these cases when merging hook configurations:
+### Idempotency
 
-- **No existing config file**: Create it with only the Pushback entry.
-- **Existing config, no conflicting hooks**: Add the Pushback entry to the hooks array.
-- **Existing config, Pushback already present**: Update in place (idempotent).
+The setup script is safe to run multiple times:
+- Config is only written if not present
+- Gitignore entry is checked before adding
+- Our own hook shim is overwritten with the latest version
+- Hook logic in `.pushback/hooks/pre-push.js` is always overwritten with the latest
+- Hook manager entries are checked for existing Pushback references before appending
+- Third-party hooks are only backed up once (won't re-backup `pre-push.previous`)
 
 ## 7. Project Configuration
 
@@ -321,17 +309,18 @@ No logging or reporting of overrides in v1.
 
 ## 9. Cross-Tool Compatibility
 
-### Differences Between Cursor and Claude Code Hooks
+### Universal Hook
 
-| Aspect | Cursor | Claude Code |
-|--------|--------|-------------|
-| Config file | `.cursor/hooks.json` | `.claude/settings.json` |
-| Hook event | `beforeShellExecution` | `PreToolUse` (matcher: `Bash`) |
-| Command matching | `matcher` field on the hook entry | Script inspects command from JSON stdin |
-| Block mechanism | Exit code 2 or `"permission": "deny"` | Exit code 2 or `"decision": "block"` |
-| Response format | `{ permission, user_message, agent_message }` | `{ decision, reason }` or stdout message |
+Because Pushback uses a native git pre-push hook, it works with any git client:
 
-The `check-verification.sh` script must handle both input formats. It can detect the source by checking for the `hook_event_name` field in the JSON input, or by checking which fields are present.
+| Client | Supported |
+|--------|-----------|
+| Terminal (`git push`) | ✓ |
+| Cursor (agent or terminal) | ✓ |
+| Claude Code (agent or terminal) | ✓ |
+| VS Code integrated terminal | ✓ |
+| Git GUIs (GitKraken, Fork, etc.) | ✓ |
+| CI/CD (if pushing from pipelines) | ✓ (use override env var) |
 
 ### Skill Compatibility
 
@@ -366,16 +355,19 @@ After writing the receipt, the skill instructs the agent to re-run the original 
 ### Multiple developers on the same machine
 The receipt is per-project, not per-user. On shared machines, one developer's verification could theoretically clear the gate for another. This is acceptable for v1 given it's a local development tool.
 
-### Hook script not found
-If `check-verification.sh` is missing (e.g., deleted accidentally), the hook fails. In Cursor, hooks fail open by default (command proceeds). The `failClosed: true` option can be set for stricter enforcement, but v1 defaults to fail-open to avoid blocking developers due to setup issues.
+### Existing pre-push hook
+If the user already has a `.git/hooks/pre-push`, the setup script backs it up to `pre-push.previous` and chains execution. The Pushback hook runs first; if it passes, the previous hook runs with the original arguments.
+
+### Hook not found
+If the pre-push hook is deleted accidentally, pushes will proceed without verification. The skill checks for the hook's presence on first use and re-installs if needed.
 
 ## 11. Future Technical Considerations
 
 These are out of scope for v1 but inform the architecture:
 
-- **Git hook fallback**: A `.git/hooks/pre-push` script that checks for the receipt file. No LLM needed — just hash comparison. Covers manual terminal pushes.
 - **Receipt-in-commit-message**: Appending a `Verified-By: pushback` trailer or emoji to the final commit message for team visibility.
 - **Verification transcript storage**: Saving Q&A transcripts (locally or in a `.pushback/history/` directory) for developer self-review.
 - **Depth scaling**: Using diff complexity metrics (files touched, cyclomatic complexity delta, new dependencies) to scale question count from 1 to 5.
-- **Codex / OpenCode support**: Adding hook configurations for these tools as their hook systems mature.
-- **Per-commit gating**: Opt-in configuration to also gate `git commit`, using `git diff --cached` for the hash instead of the upstream diff. Useful for teams that want tighter control.
+- **Codex / OpenCode support**: Adding skill definitions for these tools as their skill systems mature.
+- **Per-commit gating**: Opt-in configuration to also gate `git commit`, using a `pre-commit` hook with `git diff --cached` for the hash instead of the upstream diff. Useful for teams that want tighter control.
+- **Core hooks integration**: For tools like Cursor and Claude Code that support hooks natively, the pre-push hook could be supplemented with editor hooks that provide richer agent integration (auto-starting the skill conversation on block).

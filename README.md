@@ -8,7 +8,7 @@ Pushback adds one checkpoint before `git push`: a short conversation. The agent 
 
 This is opinionated, and that's the point. It adds friction — but it puts you in the driver's seat. You're the architect. The agent handles implementation. Pushback makes sure you stay engaged with what's being built.
 
-For teams, it goes further. Every verified push carries a cryptographic receipt. A GitHub Action checks for it on pull requests. Your team can see, at a glance, that the author understood what they shipped. Not because they said so — because they proved it.
+For teams, it goes further. Every verified push carries a cryptographic receipt. A GitHub Action checks for it on pull requests. Your team can see, at a glance, that the author understood what they shipped. Not because they clicked a box — because they engaged with the changes.
 
 ## Install
 
@@ -16,17 +16,20 @@ For teams, it goes further. Every verified push carries a cryptographic receipt.
 npx skills add arielbk/pushback
 ```
 
-That's it. On first use, the skill detects your editor (Cursor, Claude Code, or both), installs the hooks, writes a default config, and sets up a GitHub Action workflow for your PRs. From that point on, every `git push` through the agent is gated.
+That's it. On first use, the skill installs a git `pre-push` hook, writes a default config, and sets up a GitHub Action workflow for your PRs. From that point on, every `git push` is gated — whether it comes from your terminal, IDE, or AI agent.
+
+If your project uses Husky, lefthook, or has a `package.json`, setup integrates with your existing hook management so teammates get the hook automatically. No extra setup for the rest of the team — they clone, run `npm install`, and they're gated.
 
 ## How it works
 
 ```
-You say "push"
-  → Editor hook checks for a valid verification receipt
-    → No receipt? Push blocked. Agent starts a conversation.
-      → You answer 2-3 questions about your changes
-        → Pass → receipt written → push goes through
-        → Fail → agent points you to what to review
+git push (from anywhere)
+  → Git pre-push hook checks for a valid verification receipt
+    → No receipt? Push blocked.
+      → Run Pushback verification in your AI agent
+        → You answer 2-3 questions about your changes
+          → Pass → receipt written → push goes through
+          → Fail → agent points you to what to review
 ```
 
 The receipt is a SHA-256 hash of your outgoing diff. Make new commits after verification? The hash changes. Re-verification required. The system is self-invalidating — you can't verify once and keep pushing different code.
@@ -39,7 +42,7 @@ Questions come from the actual diff — not generic prompts. They target three a
 - **Integration awareness** — What does this touch? What else is affected?
 - **Trade-off consciousness** — What could go wrong? What are the implications?
 
-Honest gaps with self-awareness are fine. The goal is genuine engagement, not perfection. See [`verification-guide.md`](skill/references/verification-guide.md) for detailed criteria.
+Honest gaps with self-awareness are fine. You don't need perfect answers — just enough to explain the intent, what it touches, and what could go wrong. The goal is genuine engagement, not recall. See [`verification-guide.md`](skill/references/verification-guide.md) for detailed criteria.
 
 ## For teams: CI verification
 
@@ -102,16 +105,21 @@ Or tell the agent: *"Use the override and push."*
 
 AI coding agents are transforming how software gets built. But speed without understanding creates a trust problem — especially on teams. It's too easy to tell the agent "do it," glance at the output, and push. The code might work, but does the developer know *why* it works?
 
-Pushback is built on a simple belief: **the thinking is the skill**. Models change. Tools change. The way you understand your own code — that compounds. This isn't about slowing you down. It's about making sure you're actually driving.
+Pushback is built on a simple belief: **the thinking is the skill**. Models change. Tools change. The way you understand your own code — that compounds. As agents get more capable, it gets easier to hand over the wheel entirely. Pushback isn't about policing that. It's about protecting your agency as a developer — making sure you stay in the driver's seat.
 
 ## Compatibility
 
-| | Cursor | Claude Code |
-|--|--------|-------------|
-| Hook config | `.cursor/hooks.json` | `.claude/settings.json` |
-| Hook event | `beforeShellExecution` | `PreToolUse` (Bash) |
+Works with any git client — the gate is a native git `pre-push` hook, not an editor-specific integration.
 
-A single skill definition works in both editors without modification.
+| Client | Supported |
+|--------|-----------|
+| Terminal | ✓ |
+| Cursor | ✓ |
+| Claude Code | ✓ |
+| VS Code terminal | ✓ |
+| Git GUIs | ✓ |
+
+The verification conversation runs through your AI agent (Cursor or Claude Code). The skill definition works in both without modification.
 
 ## Repository structure
 
@@ -125,10 +133,11 @@ pushback/
 └── skill/                               # Bundled by npx skills add
     ├── SKILL.md                         # Agent instructions
     ├── scripts/
-    │   ├── setup.sh                     # Auto-installs hooks + workflow
-    │   └── check-verification.sh        # Receipt validation
+    │   ├── setup.js                     # Installs hook + config + persistence
+    │   ├── pre-push.js                  # Git pre-push hook logic
+    │   └── install.js                   # Lightweight hook installer (for prepare)
     └── references/
         ├── verification-guide.md        # Evaluation criteria
-        ├── pushback-workflow.yml      # GitHub Action template
+        ├── pushback-workflow.yml        # GitHub Action template
         └── .pushback.config.example.json
 ```

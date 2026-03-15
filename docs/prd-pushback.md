@@ -54,16 +54,16 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 ### 4.2 Installation and Setup
 
 1. Pushback must be installable as a single skill that works across both Cursor and Claude Code.
-2. On first use, the skill must automatically configure the necessary editor hooks (no manual hook setup required by the developer).
-3. The setup must detect which tools are present (Cursor, Claude Code, or both) and configure hooks accordingly.
-4. The setup must not overwrite existing hook configurations — it must merge its configuration alongside any hooks already in place.
+2. On first use, the skill must automatically install a git `pre-push` hook (no manual hook setup required by the developer).
+3. The setup must handle existing pre-push hooks gracefully — back them up and chain execution rather than overwriting.
+4. The setup must be idempotent — safe to run multiple times without duplicating hooks or config.
 
 ### 4.3 Hook Behavior
 
-1. The hook must intercept `git push` initiated through the AI agent by default. Optionally, teams can configure it to also trigger on `git commit`.
-2. Which commands trigger verification must be configurable at the project level.
-3. The hook must check for a valid verification receipt before allowing the command to proceed.
-4. If no valid receipt exists, the hook must block the command and direct the agent to initiate the verification conversation.
+1. The hook must intercept all `git push` commands via a native git `pre-push` hook — from any client (terminal, IDE, AI agent).
+2. The hook must check for a valid verification receipt before allowing the push to proceed.
+3. If no valid receipt exists, the hook must block the push and display a clear message directing the developer to run the Pushback skill in their AI agent.
+4. The developer must be able to invoke the skill manually to conduct the verification conversation.
 
 ### 4.4 Verification State
 
@@ -86,8 +86,7 @@ It's too easy to tell the agent "do it," glance at the output at 5pm, and push t
 
 - **Team-visible verification logs or dashboards** — v1 is a local gate only. No shaming, no leaderboards, no team-facing reports.
 - **Commit message annotations** — No verification metadata in commit messages for v1 (potential future feature: a small indicator like an emoji).
-- **Manual terminal coverage** — v1 only intercepts commands initiated through the AI agent. Developers committing from a standalone terminal are not covered (future enhancement).
-- **Standalone CLI mode** — v1 does not ship as an independent CLI tool. It operates through the skill + hook mechanism within supported editors.
+- **Standalone CLI mode** — v1 does not ship as an independent CLI tool. The verification conversation runs through the AI agent's skill system.
 - **LLM API cost burden** — The system must never require its own API keys or incur costs beyond the user's existing editor/LLM subscription.
 - **Codex / OpenCode support** — Not in v1 due to less mature hook systems. Can be added later.
 - **Pair/mob programming workflows** — Out of scope for v1.

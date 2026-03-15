@@ -1,6 +1,6 @@
 ---
 name: pushback
-description: Use when the developer wants to push or commit code, verify their understanding of changes, run pushback verification, or when a git push has been blocked by the Pushback gate.
+description: Use when the developer wants to verify their understanding of changes before pushing, run pushback verification, or when a git push has been blocked.
 ---
 
 # Pushback
@@ -11,19 +11,25 @@ Pushback ensures the developer understands what the AI agent is about to push. I
 
 ## First-Use Setup
 
-Before doing anything else, check whether the hook script is installed:
+Before doing anything else, check whether Pushback is fully set up — both the hook logic and the active git hook:
 
 ```bash
-ls .pushback/hooks/check-verification.sh
+test -f .git/hooks/pre-push && grep -q '.pushback' .git/hooks/pre-push && echo "installed" || echo "not installed"
 ```
 
-If the file is missing, run the setup script first:
+If the hook is not installed, run the setup script:
 
 ```bash
-bash "$(dirname "$0")/scripts/setup.sh"
+node "$(dirname "$0")/scripts/setup.js"
 ```
 
-The setup script installs the hook into `.cursor/hooks.json` and/or `.claude/settings.json` (whichever editors are detected), copies the hook script, writes a default config, and adds the receipt file to `.gitignore`.
+If the hook logic exists (`.pushback/hooks/pre-push.js`) but the git hook is missing, the lightweight installer is enough:
+
+```bash
+node .pushback/hooks/install.js
+```
+
+The setup script installs the git `pre-push` hook, copies the hook logic to `.pushback/hooks/pre-push.js`, writes a default config, integrates with the project's hook manager (Husky, lefthook, or package.json prepare script), and adds the receipt file to `.gitignore`. The hook gates all pushes — from the terminal, IDE, or AI agent.
 
 ---
 
@@ -118,7 +124,7 @@ fi
 Tell the developer:
 > "You've demonstrated a solid understanding of these changes. Writing the verification receipt and retrying the push."
 
-Then re-run the original git command. The hook will find the matching hash and allow it through.
+Then re-run the original git command. The pre-push hook will find the matching hash and allow it through.
 
 **On fail:**
 
@@ -157,5 +163,6 @@ PUSHBACK_OVERRIDE=1 git push
 
 - Detailed evaluation criteria and examples: `references/verification-guide.md`
 - Config defaults: `references/.pushback.config.example.json`
-- Hook script logic: `scripts/check-verification.sh`
-- Setup script: `scripts/setup.sh`
+- Pre-push hook: `scripts/pre-push.js`
+- Hook installer: `scripts/install.js`
+- Setup script: `scripts/setup.js`
