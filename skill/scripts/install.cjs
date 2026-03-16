@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Pushback — lightweight hook installer
-// Installs the git pre-push shim if .pushback/hooks/pre-push.js exists.
+// Installs the git pre-push shim if .pushback/hooks/pre-push.cjs exists.
 // Designed to run from a package.json "prepare" script so that every
 // developer gets the hook automatically after `npm install`.
 // Fast, silent on success, idempotent.
@@ -22,7 +22,7 @@ try {
   process.exit(0);
 }
 
-const hookLogic = path.join(repoRoot, '.pushback', 'hooks', 'pre-push.js');
+const hookLogic = path.join(repoRoot, '.pushback', 'hooks', 'pre-push.cjs');
 if (!fs.existsSync(hookLogic)) {
   // Pushback not set up in this project — skip silently
   process.exit(0);
@@ -48,12 +48,9 @@ if (fs.existsSync(prePushHook)) {
 // Write the shim
 fs.mkdirSync(gitHooksDir, { recursive: true });
 
-const shimContent = `#!/usr/bin/env node
-'use strict';
-const { execSync } = require('child_process');
-const path = require('path');
-const root = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-require(path.join(root, '.pushback', 'hooks', 'pre-push.js'));
+const shimContent = `#!/usr/bin/env sh
+# Pushback pre-push hook
+exec node "$(git rev-parse --show-toplevel)/.pushback/hooks/pre-push.cjs" "$@"
 `;
 
 fs.writeFileSync(prePushHook, shimContent);

@@ -134,8 +134,8 @@ pushback/
     ├── SKILL.md                         # Agent instructions
     ├── scripts/
     │   ├── setup.js                     # Installs hook + config + persistence
-    │   ├── pre-push.js                  # Git pre-push hook logic
-    │   └── install.js                   # Lightweight hook installer (for prepare)
+    │   ├── pre-push.cjs                  # Git pre-push hook logic
+    │   └── install.cjs                   # Lightweight hook installer (for prepare)
     └── references/
         ├── verification-guide.md        # Evaluation criteria
         ├── pushback-workflow.yml        # GitHub Action template

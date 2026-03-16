@@ -59,8 +59,8 @@ pushback/
 ├── SKILL.md                          # Skill definition (Cursor + Claude Code)
 ├── scripts/
 │   ├── setup.js                      # Installs hook + config + persistence
-│   ├── pre-push.js                   # Git pre-push hook logic
-│   └── install.js                    # Lightweight hook installer (for prepare)
+│   ├── pre-push.cjs                   # Git pre-push hook logic
+│   └── install.cjs                    # Lightweight hook installer (for prepare)
 ├── references/
 │   └── verification-guide.md         # Detailed verification criteria and examples
 └── .pushback.config.example.json     # Example project-level configuration
@@ -72,16 +72,16 @@ When installed in a project, the following is created:
 <project-root>/
 ├── .git/
 │   └── hooks/
-│       └── pre-push                  # Tiny Node shim → .pushback/hooks/pre-push.js
+│       └── pre-push                  # Shell shim → .pushback/hooks/pre-push.cjs
 └── .pushback/
     ├── config.json                   # Project-level configuration
     ├── verified                      # Current verification receipt (gitignored)
     └── hooks/
-        ├── pre-push.js              # Hook logic (version-controlled)
-        └── install.js               # Lightweight hook installer (version-controlled)
+        ├── pre-push.cjs              # Hook logic (version-controlled)
+        └── install.cjs               # Lightweight hook installer (version-controlled)
 ```
 
-The hook logic at `.pushback/hooks/pre-push.js` is committed to the repo so the team shares the same version. The shim at `.git/hooks/pre-push` is not version-controlled and is created by running setup.
+The hook logic at `.pushback/hooks/pre-push.cjs` is committed to the repo so the team shares the same version. The shim at `.git/hooks/pre-push` is not version-controlled and is created by running setup.
 
 ## 3. Skill Definition
 
@@ -148,7 +148,7 @@ Thresholds are configurable via `.pushback/config.json`.
 
 ### Git Pre-Push Hook
 
-Pushback uses a native git `pre-push` hook. The `.git/hooks/pre-push` file is a small Node.js shim that `require()`s the real hook logic from `.pushback/hooks/pre-push.js`. This runs before every push, regardless of client — terminal, IDE, or AI agent.
+Pushback uses a native git `pre-push` hook. The `.git/hooks/pre-push` file is a small shell shim that calls `node .pushback/hooks/pre-push.cjs`. Using a shell shim avoids ESM/CJS conflicts — the `.cjs` extension ensures the hook logic always runs as CommonJS regardless of the project's `package.json` `type` field. This runs before every push, regardless of client — terminal, IDE, or AI agent.
 
 Both scripts are written in Node.js with zero npm dependencies (only built-in modules: `fs`, `path`, `child_process`, `crypto`). This ensures cross-platform compatibility — macOS, Linux, and Windows (via Git Bash) — without worrying about shell differences.
 
@@ -233,12 +233,12 @@ For later versions, the receipt could be expanded to a JSON format:
 ### Installation Steps
 
 1. **Create** `.pushback/hooks/` directory
-2. **Copy** hook logic to `.pushback/hooks/pre-push.js` (version-controlled, shared with team)
-3. **Copy** installer to `.pushback/hooks/install.js` (version-controlled)
+2. **Copy** hook logic to `.pushback/hooks/pre-push.cjs` (version-controlled, shared with team)
+3. **Copy** installer to `.pushback/hooks/install.cjs` (version-controlled)
 4. **Create** `.pushback/config.json` with defaults (if not present)
 5. **Add** `.pushback/verified` to `.gitignore` (if not already present)
 6. **Detect hook manager** and integrate for persistence (see below)
-7. **Install** a small Node shim at `.git/hooks/pre-push` for the current developer
+7. **Install** a small shell shim at `.git/hooks/pre-push` for the current developer
 8. **Install** GitHub Action workflow (if template is available)
 
 ### Hook Persistence
@@ -247,12 +247,12 @@ The first developer runs setup manually. After that, the hook must install autom
 
 | Strategy | Detection | Integration |
 |----------|-----------|-------------|
-| **Husky** | `.husky/` directory exists | Creates/appends to `.husky/pre-push` with `node .pushback/hooks/pre-push.js` |
+| **Husky** | `.husky/` directory exists | Creates/appends to `.husky/pre-push` with `node .pushback/hooks/pre-push.cjs` |
 | **lefthook** | `lefthook.yml` or `.lefthook.yml` exists | Appends a `pre-push` command entry to the YAML config |
-| **package.json** (no hook manager) | `package.json` exists | Adds/appends a `prepare` script: `node .pushback/hooks/install.js` |
+| **package.json** (no hook manager) | `package.json` exists | Adds/appends a `prepare` script: `node .pushback/hooks/install.cjs` |
 | **No package.json** | None of the above | Installs shim directly; warns that teammates need manual setup |
 
-The `install.js` script is a lightweight, silent installer designed to run from a `prepare` script. It only installs the git hook shim — no config, no workflow, no output on success. It exits silently if Pushback isn't set up in the project or if the hook is already installed.
+The `install.cjs` script is a lightweight, silent installer designed to run from a `prepare` script. It only installs the git hook shim — no config, no workflow, no output on success. It exits silently if Pushback isn't set up in the project or if the hook is already installed.
 
 ### Idempotency
 
@@ -260,7 +260,7 @@ The setup script is safe to run multiple times:
 - Config is only written if not present
 - Gitignore entry is checked before adding
 - Our own hook shim is overwritten with the latest version
-- Hook logic in `.pushback/hooks/pre-push.js` is always overwritten with the latest
+- Hook logic in `.pushback/hooks/pre-push.cjs` is always overwritten with the latest
 - Hook manager entries are checked for existing Pushback references before appending
 - Third-party hooks are only backed up once (won't re-backup `pre-push.previous`)
 

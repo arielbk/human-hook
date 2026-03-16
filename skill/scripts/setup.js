@@ -19,8 +19,8 @@ function log(msg) {
 
 const repoRoot = git('rev-parse --show-toplevel');
 const skillDir = path.resolve(__dirname, '..');
-const hookSrc = path.join(skillDir, 'scripts', 'pre-push.js');
-const installSrc = path.join(skillDir, 'scripts', 'install.js');
+const hookSrc = path.join(skillDir, 'scripts', 'pre-push.cjs');
+const installSrc = path.join(skillDir, 'scripts', 'install.cjs');
 const pushbackDir = path.join(repoRoot, '.pushback');
 const hooksDestDir = path.join(pushbackDir, 'hooks');
 const configFile = path.join(pushbackDir, 'config.json');
@@ -33,13 +33,13 @@ console.log('Pushback: running setup...');
 
 fs.mkdirSync(hooksDestDir, { recursive: true });
 
-// Copy hook logic to .pushback/hooks/pre-push.js (version-controlled)
-fs.copyFileSync(hookSrc, path.join(hooksDestDir, 'pre-push.js'));
-log('\u2713 Hook script installed at .pushback/hooks/pre-push.js');
+// Copy hook logic to .pushback/hooks/pre-push.cjs (version-controlled)
+fs.copyFileSync(hookSrc, path.join(hooksDestDir, 'pre-push.cjs'));
+log('\u2713 Hook script installed at .pushback/hooks/pre-push.cjs');
 
-// Copy install script to .pushback/hooks/install.js (for prepare script)
-fs.copyFileSync(installSrc, path.join(hooksDestDir, 'install.js'));
-log('\u2713 Install script at .pushback/hooks/install.js');
+// Copy install script to .pushback/hooks/install.cjs (for prepare script)
+fs.copyFileSync(installSrc, path.join(hooksDestDir, 'install.cjs'));
+log('\u2713 Install script at .pushback/hooks/install.cjs');
 
 // Write default config if not present
 if (!fs.existsSync(configFile)) {
@@ -92,7 +92,7 @@ const huskyDir = path.join(repoRoot, '.husky');
 const lefthookYml = path.join(repoRoot, 'lefthook.yml');
 const lefthookDotYml = path.join(repoRoot, '.lefthook.yml');
 
-const PUSHBACK_HOOK_LINE = 'node .pushback/hooks/pre-push.js';
+const PUSHBACK_HOOK_LINE = 'node .pushback/hooks/pre-push.cjs';
 let hookInstalled = false;
 
 // ── Strategy 1: Husky ────────────────────────────────────────────────────
@@ -152,12 +152,12 @@ pre-push:
 
 // ── Strategy 3: package.json prepare script ──────────────────────────────
 // If there's a package.json but no hook manager, add a "prepare" script
-// that runs install.js. This mirrors what Husky does — every `npm install`
+// that runs install.cjs. This mirrors what Husky does — every `npm install`
 // triggers hook installation.
 
 if (!hookInstalled && fs.existsSync(packageJsonPath)) {
   const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const prepareCmd = 'node .pushback/hooks/install.js';
+  const prepareCmd = 'node .pushback/hooks/install.cjs';
 
   if (!pkg.scripts) pkg.scripts = {};
 
@@ -197,12 +197,11 @@ const prePushHook = path.join(gitHooksDir, 'pre-push');
 
 fs.mkdirSync(gitHooksDir, { recursive: true });
 
-const shimContent = `#!/usr/bin/env node
-'use strict';
-const { execSync } = require('child_process');
-const path = require('path');
-const root = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-require(path.join(root, '.pushback', 'hooks', 'pre-push.js'));
+// The shim is a shell script so it works regardless of package.json "type".
+// It calls node on a .cjs file which is always treated as CommonJS.
+const shimContent = `#!/usr/bin/env sh
+# Pushback pre-push hook
+exec node "$(git rev-parse --show-toplevel)/.pushback/hooks/pre-push.cjs" "$@"
 `;
 
 if (fs.existsSync(prePushHook)) {

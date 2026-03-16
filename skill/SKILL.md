@@ -23,13 +23,13 @@ If the hook is not installed, run the setup script:
 node "$(dirname "$0")/scripts/setup.js"
 ```
 
-If the hook logic exists (`.pushback/hooks/pre-push.js`) but the git hook is missing, the lightweight installer is enough:
+If the hook logic exists (`.pushback/hooks/pre-push.cjs`) but the git hook is missing, the lightweight installer is enough:
 
 ```bash
-node .pushback/hooks/install.js
+node .pushback/hooks/install.cjs
 ```
 
-The setup script installs the git `pre-push` hook, copies the hook logic to `.pushback/hooks/pre-push.js`, writes a default config, integrates with the project's hook manager (Husky, lefthook, or package.json prepare script), and adds the receipt file to `.gitignore`. The hook gates all pushes — from the terminal, IDE, or AI agent.
+The setup script installs the git `pre-push` hook, copies the hook logic to `.pushback/hooks/pre-push.cjs`, writes a default config, integrates with the project's hook manager (Husky, lefthook, or package.json prepare script), and adds the receipt file to `.gitignore`. The hook gates all pushes — from the terminal, IDE, or AI agent.
 
 ---
 
@@ -163,6 +163,6 @@ PUSHBACK_OVERRIDE=1 git push
 
 - Detailed evaluation criteria and examples: `references/verification-guide.md`
 - Config defaults: `references/.pushback.config.example.json`
-- Pre-push hook: `scripts/pre-push.js`
-- Hook installer: `scripts/install.js`
+- Pre-push hook: `scripts/pre-push.cjs`
+- Hook installer: `scripts/install.cjs`
 - Setup script: `scripts/setup.js`
