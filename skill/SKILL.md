@@ -17,29 +17,29 @@ Before doing anything else, check whether Pushback is fully set up — both the 
 test -f .git/hooks/pre-push && grep -q '.pushback' .git/hooks/pre-push && echo "installed" || echo "not installed"
 ```
 
-If the hook is not installed, run the setup script:
+If the hook is not installed, run the setup command:
 
 ```bash
-node "$(dirname "$0")/scripts/setup.cjs"
+npx pushback setup
 ```
 
-If the hook logic exists (`.pushback/hooks/pre-push.cjs`) but the git hook is missing, the lightweight installer is enough:
+If pushback is set up (`.pushback/config.json` exists) but the git hook is missing, the lightweight installer is enough:
 
 ```bash
-node .pushback/hooks/install.cjs
+npx pushback install
 ```
 
-The setup script creates the `.pushback/` directory, copies the hook logic, writes a default config, adds the receipt to `.gitignore`, installs the git hook shim, and sets up the GitHub Action workflow. The hook gates all pushes — from the terminal, IDE, or AI agent.
+The setup command creates the `.pushback/` directory, writes a default config, adds the receipt to `.gitignore`, installs the git hook shim, and sets up the GitHub Action workflow. The hook gates all pushes — from the terminal, IDE, or AI agent.
 
 ### Hook Persistence
 
 After setup, make sure teammates will get the hook automatically when they clone and install. Look at what the project already uses and integrate accordingly:
 
-- **Husky** (`.husky/` directory exists): Add `node .pushback/hooks/pre-push.cjs` to `.husky/pre-push` — create the file if it doesn't exist, append if it does. Husky runs these on every push for anyone who runs `npm install`.
-- **lefthook** (`lefthook.yml` or `.lefthook.yml` exists): Add a `pushback` command under the `pre-push` section. If a `pre-push:` block already exists, merge into it — don't create a duplicate top-level key.
-- **Other hook managers**: Read their docs/config and add the equivalent pre-push entry. The command to run is always `node .pushback/hooks/pre-push.cjs`.
-- **No hook manager, but has `package.json`**: Add `node .pushback/hooks/install.cjs` to the `prepare` script. If a `prepare` script already exists, append with `&&`. The `install.cjs` script is lightweight and silent — it just installs the git hook shim.
-- **No hook manager, no `package.json`**: Note that teammates will need to run `node .pushback/hooks/install.cjs` manually after cloning.
+- **Husky** (`.husky/` directory exists): Add `npx pushback check` to `.husky/pre-push` — create the file if it doesn't exist, append if it does. Husky runs these on every push for anyone who runs `npm install`.
+- **lefthook** (`lefthook.yml` or `.lefthook.yml` exists): Add a `pushback` command under the `pre-push` section with `run: npx pushback check`. If a `pre-push:` block already exists, merge into it — don't create a duplicate top-level key.
+- **Other hook managers**: Read their docs/config and add the equivalent pre-push entry. The command to run is always `npx pushback check`.
+- **No hook manager, but has `package.json`**: Add `npx pushback install` to the `prepare` script. If a `prepare` script already exists, append with `&&`. The install command is lightweight and silent — it just installs the git hook shim.
+- **No hook manager, no `package.json`**: Note that teammates will need to run `npx pushback install` manually after cloning.
 
 Check that whatever you've added doesn't duplicate existing Pushback entries (look for `.pushback` in the relevant config). If the project uses a hook manager that sets `core.hooksPath` (like Husky), the setup script's `.git/hooks/pre-push` shim won't run — the hook manager's integration is what actually gates pushes.
 
@@ -175,6 +175,4 @@ PUSHBACK_OVERRIDE=1 git push
 
 - Detailed evaluation criteria and examples: `references/verification-guide.md`
 - Config defaults: `references/.pushback.config.example.json`
-- Pre-push hook: `scripts/pre-push.cjs`
-- Hook installer: `scripts/install.cjs`
-- Setup script: `scripts/setup.cjs`
+- CLI package: `pushback-cli` (`npx pushback check`, `npx pushback setup`, `npx pushback install`)

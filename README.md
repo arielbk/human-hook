@@ -13,10 +13,17 @@ For teams, it goes further. Every verified push carries a cryptographic receipt.
 ## Install
 
 ```bash
-npx skills add arielbk/pushback
+npm install -D pushback-cli
+npx pushback setup
 ```
 
-That's it. On first use, the skill installs a git `pre-push` hook, writes a default config, and sets up a GitHub Action workflow for your PRs. From that point on, every `git push` is gated — whether it comes from your terminal, IDE, or AI agent.
+The setup command installs a git `pre-push` hook, writes a default config, and sets up a GitHub Action workflow for your PRs. From that point on, every `git push` is gated — whether it comes from your terminal, IDE, or AI agent.
+
+You can also install Pushback as a skill for your AI agent:
+
+```bash
+npx skills add arielbk/pushback
+```
 
 After setup, the agent integrates with your project's existing hook management — Husky, lefthook, a `prepare` script, or whatever else you use — so teammates get the hook automatically. No extra setup for the rest of the team.
 
@@ -125,6 +132,16 @@ The verification conversation runs through your AI agent (Cursor or Claude Code)
 
 ```
 pushback/
+├── src/                                 # TypeScript source (built with tsup)
+│   ├── cli.ts                           # CLI entry point
+│   ├── commands/
+│   │   ├── check.ts                     # Pre-push verification check
+│   │   ├── setup.ts                     # Project setup
+│   │   └── install.ts                   # Lightweight hook installer
+│   └── lib/
+│       ├── git.ts                       # Git helpers
+│       ├── config.ts                    # Config loading and defaults
+│       └── paths.ts                     # Centralized path resolution
 ├── action/                              # GitHub Action for PR verification
 │   ├── action.yml
 │   ├── verify-pr.sh
@@ -132,10 +149,6 @@ pushback/
 ├── docs/                                # PRD and technical spec
 └── skill/                               # Bundled by npx skills add
     ├── SKILL.md                         # Agent instructions
-    ├── scripts/
-    │   ├── setup.cjs                     # Installs hook + config + persistence
-    │   ├── pre-push.cjs                  # Git pre-push hook logic
-    │   └── install.cjs                   # Lightweight hook installer (for prepare)
     └── references/
         ├── verification-guide.md        # Evaluation criteria
         ├── pushback-workflow.yml        # GitHub Action template
